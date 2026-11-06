@@ -394,7 +394,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-macos, build-linux， build-linux-arm64]
+    needs: [build-windows, build-macos, build-linux, build-linux-arm64]
     runs-on: ubuntu-latest
     steps:
       # `gh release create` derives the repository from the local Git checkout.
