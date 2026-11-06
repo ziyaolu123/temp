@@ -329,10 +329,72 @@ jobs:
             artifacts/ShortestPath-IDE-linux-x64.tar.gz
             artifacts/ShortestPath-IDE-linux-x64.deb
           if-no-files-found: error
+          
+  build-linux-arm64:
+    needs: validate-release
+    name: Build Linux ARM64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    env:
+      VSCODE_ARCH: arm64
+      npm_config_arch: arm64
+      npm_config_foreground_scripts: "true"
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          lfs: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config \
+            libx11-dev libxkbfile-dev libsecret-1-dev \
+            libkrb5-dev libxss1 libasound2t64
+
+      - name: Install dependencies
+        run: |
+          npmrc=$(cat .npmrc)
+          trap 'printf "%s" "$npmrc" > .npmrc' EXIT
+          sed -i '/^build_from_source=/d' .npmrc
+          npm ci
+          printf "%s" "$npmrc" > .npmrc
+          trap - EXIT
+          npm rebuild @vscode/policy-watcher @vscode/spdlog @vscode/sqlite3 native-keymap --build-from-source --foreground-scripts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Build bundled OI extensions
+        run: npm run compile-oi-extensions
+
+      - name: Build Linux ARM64 package
+        run: npm run gulp vscode-linux-arm64-min
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Archive Linux ARM64
+        run: |
+          test -d ../VSCode-linux-arm64
+          mkdir -p artifacts
+          tar -C .. -czf artifacts/ShortestPath-IDE-linux-arm64.tar.gz VSCode-linux-arm64
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-arm64
+          path: artifacts/ShortestPath-IDE-linux-arm64.tar.gz
+          if-no-files-found: error
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos, build-linux， build-linux-arm64]
     runs-on: ubuntu-latest
     steps:
       # `gh release create` derives the repository from the local Git checkout.
